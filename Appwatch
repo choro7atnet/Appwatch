@@ -1,0 +1,151 @@
+import flet as ft
+import psutil
+import platform
+from datetime import datetime
+
+def main(page: ft.Page):
+    # إعدادات الصفحة الرئيسية
+    page.title = "مراقب التطبيقات"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.padding = 0
+    
+    # القائمة الرئيسية للتطبيقات
+    apps_list = ft.ListView(expand=True, spacing=10, padding=20)
+    
+    def get_running_apps():
+        apps_list.controls.clear()
+        
+        for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'create_time']):
+            try:
+                # حساب استخدام الذاكرة بالميجابايت
+                memory_mb = proc.info['memory_info'].rss / 1024 / 1024
+                
+                # تحويل وقت البدء
+                start_time = datetime.fromtimestamp(proc.info['create_time']).strftime('%H:%M:%S')
+                
+                apps_list.controls.append(
+                    ft.Container(
+                        content=ft.ListTile(
+                            leading=ft.Icon(ft.icons.APP_REGISTRATION),
+                            title=ft.Text(proc.info['name']),
+                            subtitle=ft.Text(
+                                f"معرف العملية: {proc.info['pid']}\n"
+                                f"وقت البدء: {start_time}"
+                            ),
+                            trailing=ft.Text(f"{memory_mb:.1f} MB"),
+                        ),
+                        margin=ft.margin.all(5),
+                        border_radius=10,
+                        ink=True,
+                        bgcolor=ft.colors.SURFACE_VARIANT,
+                    )
+                )
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                pass
+        
+        page.update()
+
+    # إنشاء صفحة حول التطبيق
+    def show_about(e):
+        def close_dlg(e):
+            page.dialog.open = False
+            page.update()
+            
+        page.dialog = ft.AlertDialog(
+            title=ft.Text("حول التطبيق"),
+            content=ft.Column([
+                ft.Text("مراقب التطبيقات - الإصدار 1.0"),
+                ft.Text("تطبيق لمراقبة التطبيقات المفتوحة وإدارتها"),
+                ft.Divider(),
+                ft.Text("معلومات النظام:"),
+                ft.Text(f"نظام التشغيل: {platform.system()} {platform.version()}"),
+                ft.Text(f"المعالج: {platform.processor()}"),
+                ft.Divider(),
+                ft.Text("المطور: اسم المطور"),
+                ft.Text("البريد الإلكتروني: example@email.com"),
+                ft.TextButton(
+                    "زيارة موقع المطور",
+                    on_click=lambda _: page.launch_url("https://your-website.com")
+                ),
+            ], tight=True),
+            actions=[
+                ft.TextButton("إغلاق", on_click=close_dlg),
+            ],
+        )
+        page.dialog.open = True
+        page.update()
+
+    # شريط التطبيق العلوي
+    app_bar = ft.AppBar(
+        leading=ft.Icon(ft.icons.APPS),
+        leading_width=40,
+        title=ft.Text("مراقب التطبيقات"),
+        center_title=True,
+        bgcolor=ft.colors.SURFACE_VARIANT,
+        actions=[
+            ft.IconButton(ft.icons.REFRESH, on_click=lambda e: get_running_apps()),
+            ft.IconButton(ft.icons.INFO, on_click=show_about),
+        ],
+    )
+
+    # إحصائيات النظام
+    def get_system_stats():
+        cpu_percent = psutil.cpu_percent()
+        memory = psutil.virtual_memory()
+        memory_percent = memory.percent
+        disk = psutil.disk_usage('/')
+        disk_percent = disk.percent
+        
+        return ft.Row([
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.icons.MEMORY),
+                    ft.Text(f"CPU: {cpu_percent}%"),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=10,
+                border_radius=10,
+                bgcolor=ft.colors.SURFACE_VARIANT,
+            ),
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.icons.STORAGE),
+                    ft.Text(f"الذاكرة: {memory_percent}%"),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=10,
+                border_radius=10,
+                bgcolor=ft.colors.SURFACE_VARIANT,
+            ),
+            ft.Container(
+                content=ft.Column([
+                    ft.Icon(ft.icons.DISC_FULL),
+                    ft.Text(f"القرص: {disk_percent}%"),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=10,
+                border_radius=10,
+                bgcolor=ft.colors.SURFACE_VARIANT,
+            ),
+        ], alignment=ft.MainAxisAlignment.SPACE_AROUND)
+
+    # تحديث الإحصائيات كل 5 ثواني
+    def update_stats():
+        stats_row.controls = [get_system_stats()]
+        page.update()
+        page.set_interval(update_stats, 5000)
+
+    stats_row = ft.Row([get_system_stats()], alignment=ft.MainAxisAlignment.CENTER)
+
+    # إضافة كل العناصر إلى الصفحة
+    page.add(
+        app_bar,
+        ft.Container(
+            content=stats_row,
+            margin=ft.margin.all(10),
+        ),
+        apps_list,
+    )
+    
+    # تحديث البيانات
+    get_running_apps()
+    update_stats()
+
+ft.app(target=main)
